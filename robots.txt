@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://islam122344.github.io/wasabi26-site/sitemap.xml
