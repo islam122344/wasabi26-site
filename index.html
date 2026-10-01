@@ -533,6 +533,10 @@
                     <input name="customerPhone" type="tel" autocomplete="tel" required maxlength="30" placeholder="+7 900 000-00-00">
                 </label>
                 <label class="order-form__field">
+                    <span>Адрес доставки</span>
+                    <input name="customerAddress" autocomplete="street-address" required maxlength="180" placeholder="Улица, дом, квартира">
+                </label>
+                <label class="order-form__field">
                     <span>Комментарий <small>необязательно</small></span>
                     <textarea name="customerComment" rows="2" maxlength="300" placeholder="Например, пожелания к заказу"></textarea>
                 </label>
@@ -797,6 +801,7 @@
                 `Итого: ${total} ₽`,
                 `Имя: ${formData.get('customerName')}`,
                 `Телефон: ${formData.get('customerPhone')}`,
+                `Адрес доставки: ${formData.get('customerAddress')}`,
                 formData.get('customerComment') ? `Комментарий: ${formData.get('customerComment')}` : ''
             ].filter(Boolean).join('\n');
             window.location.assign(`https://wa.me/79094827278?text=${encodeURIComponent(message)}`);
