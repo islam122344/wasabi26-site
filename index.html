@@ -507,6 +507,41 @@
         </div>
     </div>
 
+    <button class="cart-launcher" id="cartOpen" type="button" aria-haspopup="dialog" aria-controls="cartModal">
+        <span class="cart-launcher__icon" aria-hidden="true">🛒</span>
+        <span>Корзина</span>
+        <span class="cart-launcher__summary" id="cartSummary">0 · 0 ₽</span>
+    </button>
+
+    <div class="modal" id="cartModal" aria-hidden="true">
+        <div class="modal__overlay" data-close-cart></div>
+        <section class="modal__content cart-dialog" role="dialog" aria-modal="true" aria-labelledby="cartTitle">
+            <button class="modal__close" id="cartClose" type="button" aria-label="Закрыть">&times;</button>
+            <span class="section-eyebrow">Ваш выбор</span>
+            <h2 class="modal__title cart-dialog__title" id="cartTitle">Корзина</h2>
+            <div class="cart-empty" id="cartEmpty">Пока пусто — добавьте что-нибудь вкусное из меню.</div>
+            <div class="cart-items" id="cartItems" aria-live="polite"></div>
+            <div class="cart-total" id="cartTotal" hidden></div>
+            <form class="order-form" id="orderForm" hidden>
+                <h3 class="order-form__title">Контакты для заказа</h3>
+                <label class="order-form__field">
+                    <span>Ваше имя</span>
+                    <input name="customerName" autocomplete="name" required maxlength="80" placeholder="Как к вам обращаться">
+                </label>
+                <label class="order-form__field">
+                    <span>Телефон</span>
+                    <input name="customerPhone" type="tel" autocomplete="tel" required maxlength="30" placeholder="+7 900 000-00-00">
+                </label>
+                <label class="order-form__field">
+                    <span>Комментарий <small>необязательно</small></span>
+                    <textarea name="customerComment" rows="2" maxlength="300" placeholder="Например, пожелания к заказу"></textarea>
+                </label>
+                <p class="order-form__note">Откроется WhatsApp с текстом заказа. Проверьте сообщение и нажмите «Отправить».</p>
+                <button class="hero__button order-form__submit" type="submit">Перейти в WhatsApp <span aria-hidden="true">↗</span></button>
+            </form>
+        </section>
+    </div>
+
     <script>
         const rolls = {
             "ойси": "Креветка, сыр Филадельфия, огурцы, шапочка из лосося, спайси-соус, унаги-соус.",
@@ -550,16 +585,7 @@
         }
 
         document.querySelectorAll('.dish--clickable').forEach(card => {
-            card.setAttribute('tabindex', '0');
-            card.setAttribute('role', 'button');
-            card.setAttribute('aria-haspopup', 'dialog');
-            card.addEventListener('click', () => showRoll(card));
-            card.addEventListener('keydown', event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    showRoll(card);
-                }
-            });
+            card.querySelector('.dish__hint').textContent = 'Состав можно посмотреть перед добавлением';
         });
 
         function closeModal() {
@@ -621,11 +647,169 @@
         mapModalClose.addEventListener('click', closeMapModal);
         mapModal.querySelector('.modal__overlay').addEventListener('click', closeMapModal);
 
+        const cartModal = document.getElementById('cartModal');
+        const cartOpen = document.getElementById('cartOpen');
+        const cartClose = document.getElementById('cartClose');
+        const cartItems = document.getElementById('cartItems');
+        const cartEmpty = document.getElementById('cartEmpty');
+        const cartTotal = document.getElementById('cartTotal');
+        const cartSummary = document.getElementById('cartSummary');
+        const orderForm = document.getElementById('orderForm');
+        const cartStorageKey = 'wasabi26-cart';
+        let cart = {};
+
+        try {
+            const savedCart = JSON.parse(localStorage.getItem(cartStorageKey) || '{}');
+            if (savedCart && typeof savedCart === 'object' && !Array.isArray(savedCart)) {
+                cart = savedCart;
+            }
+        } catch {
+            localStorage.removeItem(cartStorageKey);
+        }
+
+        function saveCart() {
+            localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+        }
+
+        function makeCartButton(label, action, className, ariaLabel) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = className;
+            button.textContent = label;
+            button.setAttribute('aria-label', ariaLabel);
+            button.addEventListener('click', action);
+            return button;
+        }
+
+        function renderCart() {
+            cartItems.replaceChildren();
+            let totalItems = 0;
+            let totalPrice = 0;
+            const entries = Object.entries(cart).filter(([, item]) =>
+                item && Number.isInteger(item.quantity) && item.quantity > 0 &&
+                Number.isFinite(item.price) && item.price > 0 &&
+                typeof item.name === 'string'
+            );
+            cart = Object.fromEntries(entries);
+
+            entries.forEach(([id, item]) => {
+                totalItems += item.quantity;
+                totalPrice += item.price * item.quantity;
+                const row = document.createElement('div');
+                row.className = 'cart-row';
+
+                const info = document.createElement('div');
+                info.className = 'cart-row__info';
+                const name = document.createElement('span');
+                name.className = 'cart-row__name';
+                name.textContent = item.name;
+                const price = document.createElement('span');
+                price.className = 'cart-row__price';
+                price.textContent = `${item.price * item.quantity} ₽`;
+                info.append(name, price);
+
+                const controls = document.createElement('div');
+                controls.className = 'cart-row__controls';
+                controls.append(
+                    makeCartButton('−', () => changeQuantity(id, -1), 'quantity-button', `Уменьшить количество: ${item.name}`),
+                    Object.assign(document.createElement('span'), { textContent: String(item.quantity), className: 'cart-row__quantity' }),
+                    makeCartButton('+', () => changeQuantity(id, 1), 'quantity-button', `Добавить количество: ${item.name}`),
+                    makeCartButton('Удалить', () => removeFromCart(id), 'cart-row__remove', `Удалить ${item.name} из корзины`)
+                );
+                row.append(info, controls);
+                cartItems.append(row);
+            });
+
+            const isEmpty = totalItems === 0;
+            cartEmpty.hidden = !isEmpty;
+            cartTotal.hidden = isEmpty;
+            orderForm.hidden = isEmpty;
+            cartTotal.textContent = `Итого: ${totalPrice} ₽`;
+            cartSummary.textContent = `${totalItems} · ${totalPrice} ₽`;
+            cartOpen.setAttribute('aria-label', `Корзина: ${totalItems} товаров на ${totalPrice} рублей`);
+            saveCart();
+        }
+
+        function changeQuantity(id, delta) {
+            if (!cart[id]) return;
+            cart[id].quantity += delta;
+            if (cart[id].quantity <= 0) delete cart[id];
+            renderCart();
+        }
+
+        function removeFromCart(id) {
+            delete cart[id];
+            renderCart();
+        }
+
+        document.querySelectorAll('.dish').forEach((card, index) => {
+            const name = card.querySelector('.dish__name')?.textContent.trim();
+            const priceText = card.querySelector('.dish__price')?.textContent || '';
+            const price = Number(priceText.replace(/[^\d]/g, ''));
+            if (!name || !Number.isFinite(price) || price <= 0) return;
+
+            const actions = document.createElement('div');
+            actions.className = 'dish__actions';
+
+            if (card.classList.contains('dish--clickable')) {
+                actions.append(makeCartButton('Состав', () => showRoll(card), 'dish__details-button', `Состав блюда: ${name}`));
+            }
+
+            actions.append(makeCartButton('+ В корзину', () => {
+                const id = `${index}-${name}`;
+                if (!cart[id]) cart[id] = { name, price, quantity: 0 };
+                cart[id].quantity += 1;
+                renderCart();
+                cartOpen.classList.add('cart-launcher--updated');
+                window.setTimeout(() => cartOpen.classList.remove('cart-launcher--updated'), 450);
+            }, 'dish__add-button', `Добавить ${name} за ${price} рублей в корзину`));
+            card.append(actions);
+        });
+
+        function closeCart() {
+            cartModal.classList.remove('modal--open');
+            cartModal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('modal-is-open');
+            cartOpen.focus();
+        }
+
+        cartOpen.addEventListener('click', () => {
+            cartModal.classList.add('modal--open');
+            cartModal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('modal-is-open');
+            cartClose.focus();
+        });
+        cartClose.addEventListener('click', closeCart);
+        cartModal.querySelector('[data-close-cart]').addEventListener('click', closeCart);
+
+        orderForm.addEventListener('submit', event => {
+            event.preventDefault();
+            if (!orderForm.reportValidity()) return;
+
+            const formData = new FormData(orderForm);
+            const lines = Object.values(cart).map(item => `${item.name} × ${item.quantity} — ${item.price * item.quantity} ₽`);
+            const total = Object.values(cart).reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const message = [
+                'Здравствуйте! Хочу оформить заказ в Wasabi.26:',
+                '',
+                ...lines,
+                '',
+                `Итого: ${total} ₽`,
+                `Имя: ${formData.get('customerName')}`,
+                `Телефон: ${formData.get('customerPhone')}`,
+                formData.get('customerComment') ? `Комментарий: ${formData.get('customerComment')}` : ''
+            ].filter(Boolean).join('\n');
+            window.location.assign(`https://wa.me/79094827278?text=${encodeURIComponent(message)}`);
+        });
+
+        renderCart();
+
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 closeModal();
                 if (orderModal.classList.contains('modal--open')) closeOrderModal();
                 if (mapModal.classList.contains('modal--open')) closeMapModal();
+                if (cartModal.classList.contains('modal--open')) closeCart();
             }
         });
     </script>
